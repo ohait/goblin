@@ -34,23 +34,7 @@ Note: each db can only be used by 1 single instance, since there is not mechanis
 
 ## TODO
 
-* optimize the log file for duplicates (on start?)
 * allow for extra indexes
 * add version/timestamp to the trie record to allow for conditional upserts
-* provide 
 * switch to radix or patricia trie
-
-## Benchmark
-
-store: 37K op/s (630MB/s)
-fetch: 360K op/sec (6GB/s)
-range: 410K op/sec
-range-keys: 10M op/sec
-
-### GDBM
-GDBM wrapper for go on my machine (note: it's not a fair comparison, gdbm has other features that goblin does not support, just to give an idea)
-
-25K writes/sec
-220K reads/sec
-
 
