@@ -19,28 +19,42 @@ func noError(t *testing.T, err error) {
 }
 
 func TestDB(t *testing.T) {
-	_ = os.RemoveAll("/tmp/test-mmap")
-	s, err := goblin.New("/tmp/test-mmap/")
+	_ = os.RemoveAll("/tmp/test-goblin")
+	db, err := goblin.New("/tmp/test-goblin/")
 	noError(t, err)
-	t.Logf("init %+v", s)
+	t.Logf("init %+v", db)
 
-	noError(t, s.Store("oha", []byte("Miss")))
-	noError(t, s.Store("oha", []byte("Oha")))
+	noError(t, db.Store("oha", []byte("Miss")))
+	noError(t, db.Store("oha", []byte("Oha")))
 
-	x, err := s.Fetch("oha")
+	x, err := db.Fetch("oha")
 	noError(t, err)
 	if string(x) != "Oha" {
 		t.Fatalf("expected Oha, got %q", x)
 	}
 
+	fs, err := os.Stat("/tmp/test-goblin/index.log")
+	noError(t, err)
+	size0 := fs.Size()
+
+	err = db.Optimize()
+	noError(t, err)
+
+	fs, err = os.Stat("/tmp/test-goblin/index.log")
+	noError(t, err)
+	size1 := fs.Size()
+	if size1 >= size0 {
+		t.Fatalf("Optimize: %d -> %d", size0, size1)
+	}
+	t.Logf("Optimize: %d -> %d", size0, size1)
 }
 
 func TestScale(t *testing.T) {
 	if testing.Short() {
 		t.SkipNow()
 	}
-	_ = os.RemoveAll("/tmp/test-mmap")
-	db, err := goblin.New("/tmp/test-mmap/")
+	_ = os.RemoveAll("/tmp/test-goblin")
+	db, err := goblin.New("/tmp/test-goblin/")
 	noError(t, err)
 	db.Log = t.Logf
 	t.Logf("init %+v", db)
