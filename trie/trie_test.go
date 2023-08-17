@@ -2,6 +2,7 @@ package trie_test
 
 import (
 	"fmt"
+	"io"
 	"runtime"
 	"strings"
 	"testing"
@@ -54,9 +55,32 @@ func TestTrie(t *testing.T) {
 	assert(t, x.Put("a2", "2") == nil, "a2 -> nil")
 	assert(t, x.Put("a1", "1") == nil, "a1 -> nil")
 	equal(t, "a A,a1 1,a2 2", strings.Join(list(), ","))
+	equal(t, 3, x.Count())
 
+	err := x.Range(func(k string, d string) error {
+		if k == "a1" {
+			return io.EOF
+		}
+		return nil
+	})
+	assert(t, err != nil, "range error: %v", err)
+	ct := 0
+	err = x.Range(func(k string, d string) error {
+		ct++
+		return trie.EOD
+	})
+	assert(t, err == nil, "EOD")
+	equal(t, 1, ct)
+
+	assert(t, *(x.Get("a1")) == "1", "a1")
+	assert(t, (x.Get("b3")) == nil, "b3")
+	assert(t, (x.Get("a1miss")) == nil, "a1miss")
+	assert(t, (x.Remove("a1miss")) == nil, "a1miss")
+
+	assert(t, x.Remove("a3") == nil, "remove a3")
 	assert(t, x.Remove("a1") != nil, "remove a1")
 	equal(t, "a A,a2 2", strings.Join(list(), ","))
+	assert(t, x.Get("a1") == nil, "a1")
 }
 
 func TestMem(t *testing.T) {
