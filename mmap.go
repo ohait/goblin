@@ -2,9 +2,10 @@ package goblin
 
 import (
 	"fmt"
-	"log"
 	"syscall"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 func mb(size int) string {
@@ -28,11 +29,11 @@ func (this *DB) grow() error {
 		return err
 	}
 	syscall.Munmap(this.mmap)
-	this.mmap, err = syscall.Mmap(int(this.data.Fd()), 0, newSize, syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
+	this.mmap, err = unix.Mmap(int(this.data.Fd()), 0, newSize, unix.PROT_READ|unix.PROT_WRITE, unix.MAP_SHARED_VALIDATE)
 	if err != nil {
 		return err
 	}
-	log.Printf("grow to %s in %v", mb(newSize), time.Since(t0))
+	this.Log("grow to %s in %v", mb(newSize), time.Since(t0))
 	return nil
 }
 

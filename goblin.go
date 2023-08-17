@@ -1,3 +1,5 @@
+// should be posix safe so far otherwise //go:build linux || darwin
+
 package goblin
 
 import (
@@ -8,14 +10,17 @@ import (
 	"syscall"
 
 	"github.com/ohait/goblin/trie"
+	"golang.org/x/sys/unix"
 )
 
 type DB struct {
-	m      sync.Mutex
-	blocks []byte
-	dir    string
-	data   *os.File
-	log    *os.File
+	m        sync.Mutex
+	blocks   []byte
+	dir      string
+	dataname string
+	data     *os.File
+	logname  string
+	log      *os.File
 
 	t trie.Trie[[]int]
 
@@ -24,6 +29,8 @@ type DB struct {
 	free     []int // pages that can be used
 	next     int   // next new page
 	max      int   // max page
+
+	Log func(f string, args ...any)
 }
 
 func (this *DB) String() string {
@@ -40,23 +47,24 @@ func New(dir string) (*DB, error) {
 	this := &DB{
 		dir:      dir,
 		pageSize: 256,
+		Log:      func(f string, args ...any) {},
 	}
 	err = os.MkdirAll(dir, 0777)
 	if err != nil {
 		return nil, fmt.Errorf("can't use %q: %w", dir, err)
 	}
 
-	datafile := filepath.Join(dir, "data.db")
-	logfile := filepath.Join(dir, "index.log")
+	this.dataname = filepath.Join(dir, "data.db")
+	this.logname = filepath.Join(dir, "index.log")
 
-	this.log, err = os.OpenFile(logfile, os.O_RDWR|os.O_CREATE, 0666)
+	this.log, err = os.OpenFile(this.logname, os.O_RDWR|os.O_CREATE, 0666)
 	if err != nil {
-		return nil, fmt.Errorf("can't open %q: %w", logfile, err)
+		return nil, fmt.Errorf("can't open %q: %w", this.logname, err)
 	}
 
-	this.data, err = os.OpenFile(datafile, os.O_RDWR|os.O_CREATE, 0666)
+	this.data, err = os.OpenFile(this.dataname, os.O_RDWR|os.O_CREATE, 0666)
 	if err != nil {
-		return nil, fmt.Errorf("can't open %q: %w", datafile, err)
+		return nil, fmt.Errorf("can't open %q: %w", this.dataname, err)
 	}
 
 	err = syscall.Flock(int(this.data.Fd()), syscall.LOCK_EX)
@@ -154,4 +162,12 @@ func (this *DB) Store(key string, data []byte) error {
 		this.free = append(this.free, *old...)
 	}
 	return nil
+}
+
+func (this *DB) sync() error {
+	err := unix.Msync(this.mmap, unix.MS_SYNC)
+	if err != nil {
+		return err
+	}
+	return this.log.Sync()
 }

@@ -3,18 +3,35 @@ package goblin
 import (
 	"bufio"
 	"fmt"
-	"log"
 	"os"
 	"strconv"
 	"strings"
 )
 
-// rebuil the log and drop old entries
-func (this *DB) relog() error {
+// rebuild the log and drop old entries
+// will aquire a global lock until done
+func (this *DB) Optimize() error {
 	this.m.Lock()
 	defer this.m.Unlock()
 
-	panic("NIY")
+	newlog, err := os.OpenFile(this.logname+"~", os.O_RDWR|os.O_CREATE, 0666)
+	if err != nil {
+		return err
+	}
+	err = this.t.Range(func(k string, r []int) error {
+		_, err := newlog.WriteString(formatLog(k, r) + "\n")
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	newlog.Sync()
+	err = os.Rename(this.logname+"~", this.logname)
+	if err != nil {
+		return err
+	}
+	this.log = newlog
+	return nil
 }
 
 // on start, we replay the log to reconstruct the unused pages and the trie
@@ -35,8 +52,10 @@ func (this *DB) rewind() error {
 	used := make([]uint64, (lenPages+63)/64)
 
 	r := bufio.NewScanner(this.log)
+	ct := 0
 	for r.Scan() {
 		id, _, pages := parseLog(r.Text())
+		ct++
 		//log.Printf("rewind %q in %v", id, pages)
 		old := this.t.Put(id, pages)
 		if old != nil {
@@ -59,7 +78,15 @@ func (this *DB) rewind() error {
 			this.free = append(this.free, page)
 		}
 	}
-	log.Printf("rewind done, %d free pages, next new page at %d", len(this.free), this.next)
+
+	if ct > this.t.Count()*3/2+10 {
+		err = this.Optimize()
+		if err != nil {
+			return fmt.Errorf("can't rebuild log file: %w", err)
+		}
+	}
+
+	this.Log("rewind done, %d free pages, next new page at %d", len(this.free), this.next)
 	return nil
 }
 
@@ -77,9 +104,9 @@ func parseLog(ln string) (key string, size int, pages []int) {
 	return name, i[0], i[1:]
 }
 
-func formatLog(key string, pages []int) string {
+func formatLog(key string, record []int) string {
 	parts := []string{key}
-	for _, page := range pages {
+	for _, page := range record {
 		parts = append(parts, fmt.Sprint(page))
 	}
 	return strings.Join(parts, " ")

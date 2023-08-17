@@ -40,15 +40,16 @@ func TestScale(t *testing.T) {
 		t.SkipNow()
 	}
 	_ = os.RemoveAll("/tmp/test-mmap")
-	s, err := goblin.New("/tmp/test-mmap/")
+	db, err := goblin.New("/tmp/test-mmap/")
 	noError(t, err)
-	t.Logf("init %+v", s)
+	db.Log = t.Logf
+	t.Logf("init %+v", db)
 
 	wct := 0
 	t.Run("write", func(t *testing.T) {
 		t0 := time.Now()
 		tot := 0
-		for i := 0; time.Since(t0) < 10*time.Second; i++ {
+		for i := 0; time.Since(t0) < time.Second; i++ {
 			key := fmt.Sprintf("prefix-%08x", i)
 			data := key
 			for x := 0; x < i%14; x++ {
@@ -59,7 +60,7 @@ func TestScale(t *testing.T) {
 			tot += lx
 			wct++
 			//t.Logf("key: %s, data %d bytes", key, lx)
-			s.Store(key, x)
+			db.Store(key, x)
 		}
 		dt := time.Since(t0)
 		t.Logf("wrote %d entries, %.2f MB, in %v", wct, float64(tot)/1024/1024, dt)
@@ -68,10 +69,10 @@ func TestScale(t *testing.T) {
 		t0 := time.Now()
 		tot := 0
 		ct := 0
-		for i := 0; time.Since(t0) < 10*time.Second; i = (i + 1) % wct {
+		for i := 0; time.Since(t0) < time.Second; i = (i + 1) % wct {
 			key := fmt.Sprintf("prefix-%08x", i)
 			ct++
-			data, _ := s.Fetch(key)
+			data, _ := db.Fetch(key)
 			tot += len(data)
 		}
 		dt := time.Since(t0)
@@ -80,7 +81,7 @@ func TestScale(t *testing.T) {
 	t.Run("range-no-fetch", func(t *testing.T) {
 		ct := 0
 		t0 := time.Now()
-		s.Range(func(p goblin.Pair) error {
+		db.Range(func(p goblin.Pair) error {
 			ct++
 			return nil
 		})
@@ -91,7 +92,7 @@ func TestScale(t *testing.T) {
 		ct := 0
 		tot := 0
 		t0 := time.Now()
-		s.Range(func(p goblin.Pair) error {
+		db.Range(func(p goblin.Pair) error {
 			data := p.Fetch()
 			tot += len(data)
 			ct++

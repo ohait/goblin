@@ -28,13 +28,13 @@ When there is no more space on the file, the file is truncated to a bigger size 
 
 There are 2 types of locks, locks on the index, which are optimized for concurrency, and locks on the data, which is global.
 
-This makes reads very fast, and provide safe concurrency for writes. Should be possible to use system locks to allow for
-multiple processes to use the same db at the same time.
+This makes reads very fast, and provide safe concurrency for writes.
+
+Note: each db can only be used by 1 single instance, since there is not mechanism to share changes.
 
 ## TODO
 
 * optimize the log file for duplicates (on start?)
-* Consider syscall locking to allow multiple processes to share the same db
 * allow for extra indexes
 * add version/timestamp to the trie record to allow for conditional upserts
 * provide 
