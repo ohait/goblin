@@ -40,10 +40,11 @@ func TestShow(t *testing.T) {
 func TestTrie(t *testing.T) {
 	var x trie.Trie[string]
 	list := func() (out []string) {
-		x.Range(func(k string, val string) error {
+		err := x.Range(func(k string, val string) error {
 			out = append(out, k+" "+val)
 			return nil
 		})
+		assert(t, err == nil, "err: %v", err)
 		return out
 	}
 	equal(t, 0, len(list()))

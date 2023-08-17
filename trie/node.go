@@ -149,13 +149,14 @@ func (this *node[T]) range_(prefix []byte, f func(k []byte, val T) error) (err e
 
 	this.m.Lock()
 	val := this.val
-	for i, child := range this.children {
-		list[i] = child
-	}
+	copy(list, this.children)
 	this.m.Unlock()
 
 	if val != nil {
-		f(prefix, *this.val)
+		err := f(prefix, *this.val)
+		if err != nil {
+			return err
+		}
 	}
 	for _, child := range list {
 		k := append(prefix, byte(child.ch))

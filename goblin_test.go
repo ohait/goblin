@@ -24,10 +24,16 @@ func TestDB(t *testing.T) {
 	noError(t, err)
 	t.Logf("init %+v", db)
 
+	x, err := db.Fetch("oha")
+	noError(t, err)
+	if len(x) > 0 {
+		t.Fatalf("expected no data")
+	}
+
 	noError(t, db.Store("oha", []byte("Miss")))
 	noError(t, db.Store("oha", []byte("Oha")))
 
-	x, err := db.Fetch("oha")
+	x, err = db.Fetch("oha")
 	noError(t, err)
 	if string(x) != "Oha" {
 		t.Fatalf("expected Oha, got %q", x)
@@ -47,6 +53,26 @@ func TestDB(t *testing.T) {
 		t.Fatalf("Optimize: %d -> %d", size0, size1)
 	}
 	t.Logf("Optimize: %d -> %d", size0, size1)
+
+	noError(t, db.Close())
+
+	db, err = goblin.New("/tmp/test-goblin/")
+	noError(t, err)
+	db.Log = t.Logf
+	t.Logf("reopened: %d", db.Size())
+	_ = db.Range(func(p goblin.Pair) error {
+		t.Logf("%q => %s", p.Key, p.Fetch())
+		return nil
+	})
+
+	x, err = db.Fetch("oha")
+	noError(t, err)
+	db.Log = t.Logf
+	if string(x) != "Oha" {
+		t.Fatalf("expected Oha, got %q", x)
+	}
+
+	db.Close()
 }
 
 func TestScale(t *testing.T) {
@@ -74,7 +100,7 @@ func TestScale(t *testing.T) {
 			tot += lx
 			wct++
 			//t.Logf("key: %s, data %d bytes", key, lx)
-			db.Store(key, x)
+			_ = db.Store(key, x)
 		}
 		dt := time.Since(t0)
 		t.Logf("wrote %d entries, %.2f MB, in %v", wct, float64(tot)/1024/1024, dt)
@@ -95,7 +121,7 @@ func TestScale(t *testing.T) {
 	t.Run("range-no-fetch", func(t *testing.T) {
 		ct := 0
 		t0 := time.Now()
-		db.Range(func(p goblin.Pair) error {
+		_ = db.Range(func(p goblin.Pair) error {
 			ct++
 			return nil
 		})
@@ -106,7 +132,7 @@ func TestScale(t *testing.T) {
 		ct := 0
 		tot := 0
 		t0 := time.Now()
-		db.Range(func(p goblin.Pair) error {
+		_ = db.Range(func(p goblin.Pair) error {
 			data := p.Fetch()
 			tot += len(data)
 			ct++

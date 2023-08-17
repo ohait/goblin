@@ -3,6 +3,8 @@ package goblin
 import (
 	"bufio"
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -25,7 +27,10 @@ func (this *DB) Optimize() error {
 	if err != nil {
 		return err
 	}
-	newlog.Sync()
+	err = newlog.Sync()
+	if err != nil {
+		return err
+	}
 	err = os.Rename(this.logname+"~", this.logname)
 	if err != nil {
 		return err
@@ -39,7 +44,7 @@ func (this *DB) rewind() error {
 	this.m.Lock()
 	defer this.m.Unlock()
 
-	_, err := this.log.Seek(0, os.SEEK_SET)
+	_, err := this.log.Seek(0, io.SeekStart)
 	if err != nil {
 		return fmt.Errorf("can't seek: %w", err)
 	}
@@ -54,16 +59,16 @@ func (this *DB) rewind() error {
 	r := bufio.NewScanner(this.log)
 	ct := 0
 	for r.Scan() {
-		id, _, pages := parseLog(r.Text())
+		id, record := parseLog(r.Text())
 		ct++
-		//log.Printf("rewind %q in %v", id, pages)
-		old := this.t.Put(id, pages)
+		log.Printf("rewind %q in %v: %q", id, record, r.Text())
+		old := this.t.Put(id, record)
 		if old != nil {
 			for _, page := range *old {
 				used[page/64] &= ^(uint64(1) << (page % 64))
 			}
 		}
-		for _, page := range pages {
+		for _, page := range record[1:] {
 			used[page/64] |= (1 << (uint64(page) % 64))
 			if page >= this.next {
 				this.next = page + 1
@@ -75,7 +80,7 @@ func (this *DB) rewind() error {
 		u := used[page/64] & (1 << (page % 64))
 		//log.Printf("page %d is %d (%b)", page, u, used[page/64])
 		if u == 0 {
-			this.free = append(this.free, page)
+			this.unused = append(this.unused, page)
 		}
 	}
 
@@ -86,11 +91,11 @@ func (this *DB) rewind() error {
 		}
 	}
 
-	this.Log("rewind done, %d free pages, next new page at %d", len(this.free), this.next)
+	this.Log("rewind done, %d free pages, next new page at %d", len(this.unused), this.next)
 	return nil
 }
 
-func parseLog(ln string) (key string, size int, pages []int) {
+func parseLog(ln string) (key string, record []int) {
 	parts := strings.Split(ln, " ")
 	name, parts := parts[0], parts[1:]
 	i := []int{}
@@ -101,7 +106,7 @@ func parseLog(ln string) (key string, size int, pages []int) {
 		}
 		i = append(i, id)
 	}
-	return name, i[0], i[1:]
+	return name, i
 }
 
 func formatLog(key string, record []int) string {

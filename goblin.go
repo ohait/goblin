@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"syscall"
 
@@ -15,7 +16,6 @@ import (
 
 type DB struct {
 	m        sync.Mutex
-	blocks   []byte
 	dir      string
 	dataname string
 	data     *os.File
@@ -26,7 +26,7 @@ type DB struct {
 
 	pageSize int
 	mmap     []byte
-	free     []int // pages that can be used
+	unused   []int // pages that can be used
 	next     int   // next new page
 	max      int   // max page
 
@@ -35,7 +35,7 @@ type DB struct {
 
 func (this *DB) String() string {
 	return fmt.Sprintf("{%d keys, %d+%d free pages, %s data}",
-		this.t.Count(), len(this.free), this.max-this.next, mb(this.max*this.pageSize))
+		this.t.Count(), len(this.unused), this.max-this.next, mb(this.max*this.pageSize))
 }
 
 // use the given directory as a DB.
@@ -75,7 +75,10 @@ func New(dir string) (*DB, error) {
 	s, _ := this.data.Stat()
 	fsize := s.Size()
 	if fsize == 0 {
-		this.data.Truncate(1 << 20) // 1MB
+		err = this.data.Truncate(1 << 20) // 1MB
+		if err != nil {
+			return nil, fmt.Errorf("can't create data file: %w", err)
+		}
 		fsize = 1 << 20
 	}
 	this.mmap, err = syscall.Mmap(int(this.data.Fd()), 0, int(fsize), syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
@@ -85,13 +88,23 @@ func New(dir string) (*DB, error) {
 	this.max = int(fsize / int64(this.pageSize))
 	//log.Printf("mmap at %p, max pages: %d", this.mmap, this.max)
 
-	return this, this.rewind()
+	err = this.rewind()
+	if err != nil {
+		return nil, err
+	}
+	runtime.SetFinalizer(this, func(obj any) {
+		obj.(*DB).Close()
+	})
+
+	return this, nil
 }
 
 func (this *DB) Close() error {
-	this.log.Close()
-	syscall.Munmap(this.mmap)
-	syscall.Flock(int(this.data.Fd()), syscall.LOCK_UN)
+	defer runtime.SetFinalizer(this, nil)
+	_ = this.Sync()
+	_ = this.log.Close()
+	_ = syscall.Munmap(this.mmap)
+	_ = syscall.Flock(int(this.data.Fd()), syscall.LOCK_UN)
 	return this.data.Close()
 }
 
@@ -115,14 +128,19 @@ func (this *DB) Range(cb func(Pair) error) error {
 	})
 }
 
+func (this *DB) Size() int {
+	return this.t.Count()
+}
+
 func (this *DB) Fetch(key string) ([]byte, error) {
-	//log.Printf("fetch %q", key)
+	this.Log("fetch %q", key)
 	record := this.t.Get(key)
 	if record == nil {
+		this.Log("not found %q", key)
 		return nil, nil
 	}
 	size, pages := (*record)[0], (*record)[1:]
-	//log.Printf("found key %q: size: %d, pages: %v", key, size, pages)
+	this.Log("found key %q: size: %d, pages: %v", key, size, pages)
 	return this.fetch(size, pages), nil
 }
 
@@ -133,11 +151,14 @@ func (this *DB) Store(key string, data []byte) error {
 	record := []int{len(data)}
 	for len(data) > 0 {
 		var page int
-		if len(this.free) > 0 {
-			page, this.free = this.free[0], this.free[1:]
+		if len(this.unused) > 0 {
+			page, this.unused = this.unused[0], this.unused[1:]
 		} else {
 			if this.next == this.max {
-				this.grow()
+				err := this.grow()
+				if err != nil {
+					return err
+				}
 			}
 			page = this.next
 			this.next++
@@ -159,12 +180,12 @@ func (this *DB) Store(key string, data []byte) error {
 	old := this.t.Put(key, record)
 	if old != nil {
 		// put the old pages in the free list
-		this.free = append(this.free, *old...)
+		this.unused = append(this.unused, *old...)
 	}
 	return nil
 }
 
-func (this *DB) sync() error {
+func (this *DB) Sync() error {
 	err := unix.Msync(this.mmap, unix.MS_SYNC)
 	if err != nil {
 		return err

@@ -28,7 +28,10 @@ func (this *DB) grow() error {
 	if err != nil {
 		return err
 	}
-	syscall.Munmap(this.mmap)
+	err = syscall.Munmap(this.mmap)
+	if err != nil {
+		return err
+	}
 	this.mmap, err = unix.Mmap(int(this.data.Fd()), 0, newSize, unix.PROT_READ|unix.PROT_WRITE, unix.MAP_SHARED_VALIDATE)
 	if err != nil {
 		return err
