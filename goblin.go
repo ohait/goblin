@@ -4,11 +4,11 @@ package goblin
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
 	"sync"
-	"syscall"
 
 	"github.com/ohait/goblin/trie"
 	"golang.org/x/sys/unix"
@@ -67,7 +67,7 @@ func New(dir string) (*DB, error) {
 		return nil, fmt.Errorf("can't open %q: %w", this.dataname, err)
 	}
 
-	err = syscall.Flock(int(this.data.Fd()), syscall.LOCK_EX)
+	err = unix.Flock(int(this.data.Fd()), unix.LOCK_EX)
 	if err != nil {
 		return nil, fmt.Errorf("can't flock: %w", err)
 	}
@@ -81,7 +81,7 @@ func New(dir string) (*DB, error) {
 		}
 		fsize = 1 << 20
 	}
-	this.mmap, err = syscall.Mmap(int(this.data.Fd()), 0, int(fsize), syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
+	this.mmap, err = unix.Mmap(int(this.data.Fd()), 0, int(fsize), unix.PROT_READ|unix.PROT_WRITE, unix.MAP_SHARED_VALIDATE)
 	if err != nil {
 		return nil, fmt.Errorf("can't mmap: %w", err)
 	}
@@ -103,8 +103,8 @@ func (this *DB) Close() error {
 	defer runtime.SetFinalizer(this, nil)
 	_ = this.Sync()
 	_ = this.log.Close()
-	_ = syscall.Munmap(this.mmap)
-	_ = syscall.Flock(int(this.data.Fd()), syscall.LOCK_UN)
+	_ = unix.Munmap(this.mmap)
+	_ = unix.Flock(int(this.data.Fd()), unix.LOCK_UN)
 	return this.data.Close()
 }
 
@@ -153,10 +153,13 @@ func (this *DB) Store(key string, data []byte) error {
 		var page int
 		if len(this.unused) > 0 {
 			page, this.unused = this.unused[0], this.unused[1:]
+			//log.Printf("unused: %d", page)
 		} else {
+			//log.Printf("next: %d, max: %d", this.next, this.max)
 			if this.next == this.max {
 				err := this.grow()
 				if err != nil {
+					log.Printf("grow error: %v", err)
 					return err
 				}
 			}

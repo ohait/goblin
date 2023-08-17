@@ -82,7 +82,7 @@ func TestScale(t *testing.T) {
 	_ = os.RemoveAll("/tmp/test-goblin")
 	db, err := goblin.New("/tmp/test-goblin/")
 	noError(t, err)
-	db.Log = t.Logf
+	//db.Log = t.Logf
 	t.Logf("init %+v", db)
 
 	wct := 0

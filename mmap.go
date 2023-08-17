@@ -2,7 +2,6 @@ package goblin
 
 import (
 	"fmt"
-	"syscall"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -26,15 +25,15 @@ func (this *DB) grow() error {
 	newSize := this.max * this.pageSize
 	err := this.data.Truncate(int64(newSize))
 	if err != nil {
-		return err
+		return fmt.Errorf("truncate: %w", err)
 	}
-	err = syscall.Munmap(this.mmap)
+	err = unix.Munmap(this.mmap)
 	if err != nil {
-		return err
+		return fmt.Errorf("munmap: %w", err)
 	}
 	this.mmap, err = unix.Mmap(int(this.data.Fd()), 0, newSize, unix.PROT_READ|unix.PROT_WRITE, unix.MAP_SHARED_VALIDATE)
 	if err != nil {
-		return err
+		return fmt.Errorf("mmap: %w", err)
 	}
 	this.Log("grow to %s in %v", mb(newSize), time.Since(t0))
 	return nil
