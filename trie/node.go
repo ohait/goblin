@@ -84,7 +84,6 @@ func (this *node[T]) put(k []byte, val T) (old *T) {
 }
 
 func (this *node[T]) get(k []byte) *T {
-
 	this.m.Lock()
 	if len(k) == 0 {
 		this.m.Unlock()

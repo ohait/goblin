@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -19,7 +20,7 @@ func (this *DB) Optimize() error {
 	if err != nil {
 		return err
 	}
-	err = this.t.Range(func(k string, r []int) error {
+	err = this.trie.Range(func(k string, r []int) error {
 		_, err := newlog.WriteString(formatLog(k, r) + "\n")
 		return err
 	})
@@ -60,8 +61,8 @@ func (this *DB) rewind() error {
 	for r.Scan() {
 		id, record := parseLog(r.Text())
 		ct++
-		//log.Printf("rewind %q in %v: %q", id, record, r.Text())
-		old := this.t.Put(id, record)
+		log.Printf("rewind %q in %v: %q", id, record, r.Text())
+		old := this.trie.Put(id, record)
 		if old != nil {
 			for _, page := range *old {
 				used[page/64] &= ^(uint64(1) << (page % 64))
@@ -77,13 +78,13 @@ func (this *DB) rewind() error {
 
 	for page := 0; page < this.next; page++ {
 		u := used[page/64] & (1 << (page % 64))
-		//log.Printf("page %d is %d (%b)", page, u, used[page/64])
+		//log.Printf("page %d use %v (%b)", page, u != 0, used[page/64])
 		if u == 0 {
 			this.unused = append(this.unused, page)
 		}
 	}
 
-	if ct > this.t.Count()*3/2+10 {
+	if ct > this.trie.Count()*3/2+10 {
 		err = this.Optimize()
 		if err != nil {
 			return fmt.Errorf("can't rebuild log file: %w", err)

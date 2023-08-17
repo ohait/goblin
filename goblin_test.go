@@ -12,10 +12,18 @@ import (
 func noError(t *testing.T, err error) {
 	t.Helper()
 	if err == nil {
-		t.Logf("no error")
+		//t.Logf("no error")
 	} else {
 		t.Fatal(err)
 	}
+}
+
+func long(l int) []byte {
+	out := make([]byte, l)
+	for i := 0; i < l; i++ {
+		out[i] = byte('0' + (i % 10))
+	}
+	return out
 }
 
 func TestDB(t *testing.T) {
@@ -31,6 +39,7 @@ func TestDB(t *testing.T) {
 	}
 
 	noError(t, db.Store("oha", []byte("Miss")))
+	noError(t, db.Store("oha", long(3000)))
 	noError(t, db.Store("oha", []byte("Oha")))
 
 	x, err = db.Fetch("oha")
@@ -54,6 +63,10 @@ func TestDB(t *testing.T) {
 	}
 	t.Logf("Optimize: %d -> %d", size0, size1)
 
+	// add some logs and close so the rewind will find old entries
+	noError(t, db.Store("oha", []byte("Miss")))
+	noError(t, db.Store("oha", []byte("More")))
+	noError(t, db.Store("oha", []byte("Oha")))
 	noError(t, db.Close())
 
 	db, err = goblin.New("/tmp/test-goblin/")
@@ -64,6 +77,9 @@ func TestDB(t *testing.T) {
 		t.Logf("%q => %s", p.Key, p.Fetch())
 		return nil
 	})
+	if db.Size() != 1 {
+		t.Fatalf("expected 1 entries, got %d", db.Size())
+	}
 
 	x, err = db.Fetch("oha")
 	noError(t, err)
@@ -73,6 +89,29 @@ func TestDB(t *testing.T) {
 	}
 
 	db.Close()
+}
+
+func TestGrow(t *testing.T) {
+	_ = os.RemoveAll("/tmp/test-goblin")
+	db, err := goblin.New("/tmp/test-goblin/")
+	noError(t, err)
+	//db.Log = t.Logf
+	t.Logf("init %+v", db)
+
+	// 1MB/256 => 4096 pages
+	for i := 0; i < 4097; i++ {
+		k := fmt.Sprintf("%x", i)
+		err := db.Store(k, []byte(k)) // 1 page each
+		noError(t, err)
+	}
+	for i := 0; i < 4097; i++ {
+		k := fmt.Sprintf("%x", i)
+		x, err := db.Fetch(k)
+		noError(t, err)
+		if string(x) != k {
+			t.Fatalf("mismatch %q: %q", k, x)
+		}
+	}
 }
 
 func TestScale(t *testing.T) {

@@ -22,7 +22,7 @@ type DB struct {
 	logname  string
 	log      *os.File
 
-	t trie.Trie[[]int]
+	trie trie.Trie[[]int]
 
 	pageSize int
 	mmap     []byte
@@ -35,7 +35,7 @@ type DB struct {
 
 func (this *DB) String() string {
 	return fmt.Sprintf("{%d keys, %d+%d free pages, %s data}",
-		this.t.Count(), len(this.unused), this.max-this.next, mb(this.max*this.pageSize))
+		this.trie.Count(), len(this.unused), this.max-this.next, mb(this.max*this.pageSize))
 }
 
 // use the given directory as a DB.
@@ -122,19 +122,19 @@ func (this Pair) Fetch() []byte {
 
 // range thru all the keys in lexicographic order, and return each as a Pair
 func (this *DB) Range(cb func(Pair) error) error {
-	return this.t.Range(func(key string, record []int) error {
+	return this.trie.Range(func(key string, record []int) error {
 		size, pages := (record)[0], (record)[1:]
 		return cb(Pair{key, this, size, pages})
 	})
 }
 
 func (this *DB) Size() int {
-	return this.t.Count()
+	return this.trie.Count()
 }
 
 func (this *DB) Fetch(key string) ([]byte, error) {
 	this.Log("fetch %q", key)
-	record := this.t.Get(key)
+	record := this.trie.Get(key)
 	if record == nil {
 		this.Log("not found %q", key)
 		return nil, nil
@@ -180,7 +180,7 @@ func (this *DB) Store(key string, data []byte) error {
 		return fmt.Errorf("can't write log: %w", err)
 	}
 
-	old := this.t.Put(key, record)
+	old := this.trie.Put(key, record)
 	if old != nil {
 		// put the old pages in the free list
 		this.unused = append(this.unused, *old...)
