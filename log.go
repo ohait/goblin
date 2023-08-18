@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -61,7 +60,7 @@ func (this *DB) rewind() error {
 	for r.Scan() {
 		id, record := parseLog(r.Text())
 		ct++
-		log.Printf("rewind %q in %v: %q", id, record, r.Text())
+		//log.Printf("rewind %q in %v: %q", id, record, r.Text())
 		old := this.trie.Put(id, record)
 		if old != nil {
 			for _, page := range *old {
