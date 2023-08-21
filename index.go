@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // rebuild the log and drop old entries
@@ -14,12 +15,23 @@ import (
 func (this *DB) Optimize() error {
 	this.m.Lock()
 	defer this.m.Unlock()
+	return this.optimize()
+}
+
+func (this *DB) optimize() error {
+	Logger("Optimize")
 
 	newlog, err := os.OpenFile(this.logname+"~", os.O_RDWR|os.O_CREATE, 0666)
 	if err != nil {
 		return err
 	}
+	t := time.Now().Add(time.Second)
 	err = this.trie.Range(func(k string, r []int) error {
+		now := time.Now()
+		if now.After(t) {
+			t = now.Add(time.Second)
+			Logger("Optimize %q...", k)
+		}
 		_, err := newlog.WriteString(formatLog(k, r) + "\n")
 		return err
 	})
@@ -84,13 +96,13 @@ func (this *DB) rewind() error {
 	}
 
 	if ct > this.trie.Count()*3/2+10 {
-		err = this.Optimize()
+		err = this.optimize()
 		if err != nil {
 			return fmt.Errorf("can't rebuild log file: %w", err)
 		}
 	}
 
-	this.Log("rewind done, %d free pages, next new page at %d", len(this.unused), this.next)
+	Logger("rewind done, %d free pages, next new page at %d", len(this.unused), this.next)
 	return nil
 }
 

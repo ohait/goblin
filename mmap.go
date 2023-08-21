@@ -19,6 +19,18 @@ func mb(size int) string {
 	}
 }
 
+func (this *DB) remmap(fsize int) error {
+	var err error
+	if this.mmap != nil {
+		err = unix.Munmap(this.mmap)
+		if err != nil {
+			return fmt.Errorf("munmap: %w", err)
+		}
+	}
+	this.mmap, err = unix.Mmap(int(this.data.Fd()), 0, fsize, unix.PROT_READ|unix.PROT_WRITE, unix.MAP_SHARED_VALIDATE)
+	return err
+}
+
 func (this *DB) grow() error {
 	t0 := time.Now()
 	this.max *= 2
@@ -27,29 +39,28 @@ func (this *DB) grow() error {
 	if err != nil {
 		return fmt.Errorf("truncate: %w", err)
 	}
-	err = unix.Munmap(this.mmap)
-	if err != nil {
-		return fmt.Errorf("munmap: %w", err)
-	}
-	this.mmap, err = unix.Mmap(int(this.data.Fd()), 0, newSize, unix.PROT_READ|unix.PROT_WRITE, unix.MAP_SHARED_VALIDATE)
+	err = this.remmap(newSize)
 	if err != nil {
 		return fmt.Errorf("mmap: %w", err)
 	}
-	this.Log("grow to %s in %v", mb(newSize), time.Since(t0))
+	Logger("grow to %s in %v", mb(newSize), time.Since(t0))
 	return nil
 }
 
 func (this *DB) fetch(size int, pages []int) []byte {
 	out := make([]byte, 0, size)
+	todo := size
 	this.m.Lock()
 	defer this.m.Unlock()
 	for _, page := range pages {
-		todo := cap(out)
-		if todo > this.pageSize {
-			todo = this.pageSize
+		snap := todo
+		if snap > this.pageSize {
+			snap = this.pageSize
 		}
+		todo -= snap
 		start := page * this.pageSize
-		end := start + todo
+		end := start + snap
+		//Logger("fetch %d from page %d (%q)", snap, page, string(this.mmap[start:end]))
 		out = append(out, this.mmap[start:end]...)
 	}
 	return out

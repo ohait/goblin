@@ -48,6 +48,13 @@ func TestDB(t *testing.T) {
 		t.Fatalf("expected Oha, got %q", x)
 	}
 
+	noError(t, db.Store("oha", long(3000)))
+	x, err = db.Fetch("oha")
+	noError(t, err)
+	if string(x) != string(long(3000)) {
+		t.Fatalf("expected long(3000), got %q (%d)", x, len(x))
+	}
+
 	fs, err := os.Stat("/tmp/test-goblin/index.log")
 	noError(t, err)
 	size0 := fs.Size()
@@ -71,7 +78,7 @@ func TestDB(t *testing.T) {
 
 	db, err = goblin.New("/tmp/test-goblin/")
 	noError(t, err)
-	db.Log = t.Logf
+	goblin.Logger = t.Logf
 	t.Logf("reopened: %d", db.Size())
 	_ = db.Range(func(p goblin.Pair) error {
 		t.Logf("%q => %s", p.Key, p.Fetch())
@@ -83,7 +90,7 @@ func TestDB(t *testing.T) {
 
 	x, err = db.Fetch("oha")
 	noError(t, err)
-	db.Log = t.Logf
+	goblin.Logger = t.Logf
 	if string(x) != "Oha" {
 		t.Fatalf("expected Oha, got %q", x)
 	}

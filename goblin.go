@@ -14,6 +14,8 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+var Logger = func(f string, args ...any) {}
+
 type DB struct {
 	m        sync.Mutex
 	dir      string
@@ -29,8 +31,6 @@ type DB struct {
 	unused   []int // pages that can be used
 	next     int   // next new page
 	max      int   // max page
-
-	Log func(f string, args ...any)
 }
 
 func (this *DB) String() string {
@@ -47,7 +47,6 @@ func New(dir string) (*DB, error) {
 	this := &DB{
 		dir:      dir,
 		pageSize: 256,
-		Log:      func(f string, args ...any) {},
 	}
 	err = os.MkdirAll(dir, 0777)
 	if err != nil {
@@ -81,7 +80,7 @@ func New(dir string) (*DB, error) {
 		}
 		fsize = 1 << 20
 	}
-	this.mmap, err = unix.Mmap(int(this.data.Fd()), 0, int(fsize), unix.PROT_READ|unix.PROT_WRITE, unix.MAP_SHARED_VALIDATE)
+	err = this.remmap(int(fsize))
 	if err != nil {
 		return nil, fmt.Errorf("can't mmap: %w", err)
 	}
@@ -133,14 +132,15 @@ func (this *DB) Size() int {
 }
 
 func (this *DB) Fetch(key string) ([]byte, error) {
-	this.Log("fetch %q", key)
+	//Logger("fetch %q", key)
 	record := this.trie.Get(key)
 	if record == nil {
-		this.Log("not found %q", key)
+		Logger("not found %q", key)
 		return nil, nil
 	}
 	size, pages := (*record)[0], (*record)[1:]
-	this.Log("found key %q: size: %d, pages: %v", key, size, pages)
+	Logger("found key %q: size: %d, pages: %v", key, size, pages)
+
 	return this.fetch(size, pages), nil
 }
 
@@ -153,9 +153,9 @@ func (this *DB) Store(key string, data []byte) error {
 		var page int
 		if len(this.unused) > 0 {
 			page, this.unused = this.unused[0], this.unused[1:]
-			//log.Printf("unused: %d", page)
+			//Logger("using unused: %d", page)
 		} else {
-			//log.Printf("next: %d, max: %d", this.next, this.max)
+			//Logger("using next: %d, max: %d", this.next, this.max)
 			if this.next == this.max {
 				err := this.grow()
 				if err != nil {
@@ -169,9 +169,8 @@ func (this *DB) Store(key string, data []byte) error {
 		record = append(record, page)
 		start := page * this.pageSize
 		end := start + this.pageSize
-		//log.Printf("copy(mmap[%d:%d], data)", start, end)
 		ct := copy(this.mmap[start:end], data)
-		//log.Printf("stored %d bytes in page %d", ct, page)
+		//Logger("stored %d in page %d (%q)", end-start, page, string(this.mmap[start:end]))
 		data = data[ct:]
 	}
 
@@ -183,7 +182,8 @@ func (this *DB) Store(key string, data []byte) error {
 	old := this.trie.Put(key, record)
 	if old != nil {
 		// put the old pages in the free list
-		this.unused = append(this.unused, *old...)
+		//Logger("now unused: %v", (*old)[1:])
+		this.unused = append(this.unused, (*old)[1:]...)
 	}
 	return nil
 }
