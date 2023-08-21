@@ -32,7 +32,7 @@ func (this *DB) optimize() error {
 			t = now.Add(time.Second)
 			Logger("Optimize %q...", k)
 		}
-		_, err := newlog.WriteString(formatLog(k, r) + "\n")
+		_, err := newlog.WriteString(record{k, r}.formatLog() + "\n")
 		return err
 	})
 	if err != nil {
@@ -70,16 +70,16 @@ func (this *DB) rewind() error {
 	r := bufio.NewScanner(this.log)
 	ct := 0
 	for r.Scan() {
-		id, record := parseLog(r.Text())
+		record := parseLog(r.Text())
 		ct++
 		//log.Printf("rewind %q in %v: %q", id, record, r.Text())
-		old := this.trie.Put(id, record)
+		old := this.trie.Put(record.key, record.val)
 		if old != nil {
 			for _, page := range *old {
 				used[page/64] &= ^(uint64(1) << (page % 64))
 			}
 		}
-		for _, page := range record[1:] {
+		for _, page := range record.pages() {
 			used[page/64] |= (1 << (uint64(page) % 64))
 			if page >= this.next {
 				this.next = page + 1
@@ -106,7 +106,19 @@ func (this *DB) rewind() error {
 	return nil
 }
 
-func parseLog(ln string) (key string, record []int) {
+type record struct {
+	key string
+	val []int
+}
+
+func (this record) size() int {
+	return this.val[0]
+}
+func (this record) pages() []int {
+	return this.val[1:]
+}
+
+func parseLog(ln string) record {
 	parts := strings.Split(ln, " ")
 	name, parts := parts[0], parts[1:]
 	i := []int{}
@@ -117,12 +129,15 @@ func parseLog(ln string) (key string, record []int) {
 		}
 		i = append(i, id)
 	}
-	return name, i
+	return record{
+		key: name,
+		val: i,
+	}
 }
 
-func formatLog(key string, record []int) string {
-	parts := []string{key}
-	for _, page := range record {
+func (this record) formatLog() string {
+	parts := []string{this.key}
+	for _, page := range this.val {
 		parts = append(parts, fmt.Sprint(page))
 	}
 	return strings.Join(parts, " ")

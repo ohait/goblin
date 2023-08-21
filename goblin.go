@@ -148,7 +148,10 @@ func (this *DB) Store(key string, data []byte) error {
 	this.m.Lock()
 	defer this.m.Unlock()
 
-	record := []int{len(data)}
+	record := record{
+		key: key,
+		val: []int{len(data)},
+	}
 	for len(data) > 0 {
 		var page int
 		if len(this.unused) > 0 {
@@ -166,7 +169,7 @@ func (this *DB) Store(key string, data []byte) error {
 			page = this.next
 			this.next++
 		}
-		record = append(record, page)
+		record.val = append(record.val, page)
 		start := page * this.pageSize
 		end := start + this.pageSize
 		ct := copy(this.mmap[start:end], data)
@@ -174,12 +177,12 @@ func (this *DB) Store(key string, data []byte) error {
 		data = data[ct:]
 	}
 
-	_, err := this.log.WriteString(formatLog(key, record) + "\n")
+	_, err := this.log.WriteString(record.formatLog() + "\n")
 	if err != nil {
 		return fmt.Errorf("can't write log: %w", err)
 	}
 
-	old := this.trie.Put(key, record)
+	old := this.trie.Put(key, record.val)
 	if old != nil {
 		// put the old pages in the free list
 		//Logger("now unused: %v", (*old)[1:])
