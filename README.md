@@ -2,6 +2,8 @@
 
 NOT FOR PRODUCTION USE (still under development)
 
+https://github.com/ohait/goblin/actions/workflows/go.yml/badge.svg
+
 Pure go local key-value database.
 
 Use a combination of an in memory index for keys and pages allocation which is backed up by a log file,
