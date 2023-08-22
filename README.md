@@ -2,7 +2,7 @@
 
 NOT FOR PRODUCTION USE (still under development)
 
-https://github.com/ohait/goblin/actions/workflows/go.yml/badge.svg
+[![Build Status](https://github.com/ohait/goblin/actions/workflows/go.yml/badge.svg)]
 
 Pure go local key-value database.
 
