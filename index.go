@@ -2,6 +2,7 @@ package goblin
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -32,7 +33,7 @@ func (this *DB) optimize() error {
 			t = now.Add(time.Second)
 			Logger("Optimize %q...", k)
 		}
-		_, err := newlog.WriteString(record{k, r}.formatLog() + "\n")
+		_, err := newlog.WriteString(record{k, r[0], r[1:]}.formatLog() + "\n")
 		return err
 	})
 	if err != nil {
@@ -73,13 +74,13 @@ func (this *DB) rewind() error {
 		record := parseLog(r.Text())
 		ct++
 		//log.Printf("rewind %q in %v: %q", id, record, r.Text())
-		old := this.trie.Put(record.key, record.val)
+		old := this.trie.Put(record.Key, record.val())
 		if old != nil {
 			for _, page := range *old {
 				used[page/64] &= ^(uint64(1) << (page % 64))
 			}
 		}
-		for _, page := range record.pages() {
+		for _, page := range record.Pages {
 			used[page/64] |= (1 << (uint64(page) % 64))
 			if page >= this.next {
 				this.next = page + 1
@@ -107,18 +108,33 @@ func (this *DB) rewind() error {
 }
 
 type record struct {
-	key string
-	val []int
+	Key   string `json:"key"`
+	Size  int    `json:"size"`
+	Pages []int  `json:"pages"`
 }
 
-func (this record) size() int {
-	return this.val[0]
-}
-func (this record) pages() []int {
-	return this.val[1:]
+func (this record) val() []int {
+	return append([]int{this.Size}, this.Pages...)
 }
 
-func parseLog(ln string) record {
+func parseLog(ln string) (r record) {
+	err := json.Unmarshal([]byte(ln), &r)
+	if err != nil {
+		return parseLog_(ln) // backward compat (only temporary)
+		//panic(err)
+	}
+	return
+}
+
+func (this record) formatLog() string {
+	j, err := json.Marshal(this)
+	if err != nil {
+		panic(err)
+	}
+	return string(j)
+}
+
+func parseLog_(ln string) record {
 	parts := strings.Split(ln, " ")
 	name, parts := parts[0], parts[1:]
 	i := []int{}
@@ -130,15 +146,8 @@ func parseLog(ln string) record {
 		i = append(i, id)
 	}
 	return record{
-		key: name,
-		val: i,
+		Key:   name,
+		Size:  i[0],
+		Pages: i[1:],
 	}
-}
-
-func (this record) formatLog() string {
-	parts := []string{this.key}
-	for _, page := range this.val {
-		parts = append(parts, fmt.Sprint(page))
-	}
-	return strings.Join(parts, " ")
 }

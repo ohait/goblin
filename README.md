@@ -16,9 +16,13 @@ Optimized for upserts and sort scans.
 Simple implementation based on a generic trie (https://en.wikipedia.org/wiki/Trie) with the addition of associating to any
 leaf a list of pages where the data can be fetched.
 
+By design we want to not change the tree but just add nodes, which means we cannot allow deletion (we just remove the value) and we can't
+use some optimization like a Radix tree. The advantage is that locking on the indexes have lot less contention.
+
 ### Log file
 
-Each upsert to the index is backed up in a log file
+Each upsert to the index is backed up in a log file, this happen after writing the values to the data file.
+
 
 ## Mmap file
 
@@ -40,5 +44,4 @@ Note: each db can only be used by 1 single instance, since there is not mechanis
 
 * allow for extra indexes
 * add version/timestamp to the trie record to allow for conditional upserts
-* switch to radix or patricia trie
 
